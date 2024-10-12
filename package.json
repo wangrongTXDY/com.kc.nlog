@@ -1,0 +1,21 @@
+{
+  "name": "com.kc.nlog",
+  "displayName": "KC.NLog",
+  "version": "0.1.0",
+  "unity": "2022.3",
+  "author": "WangRong <3340681993@qq.com>",
+  "dependencies": {
+    "com.kc.core": "0.1.6"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com:wangrongTXDY/com.kc.nlog.git"
+  },
+  "keywords": [
+    "kc"
+  ],
+  "license": "MIT"
+}
