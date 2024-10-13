@@ -1,6 +1,5 @@
 ﻿using System;
 using System.IO;
-using System.Text;
 using NLog;
 using NLog.Config;
 using NLog.Layouts;
@@ -15,113 +14,138 @@ namespace KC
     public class Log : Singleton<Log>, ISingletonAwake
     {
         private LogType _logType;
-        private FileTarget _defaultFileTarget;
-        private readonly LoggingConfiguration _loggingConfiguration = new LoggingConfiguration();
+        private LoggingConfiguration _loggingConfiguration;
 
         public string ConfigPath { get; set; }
 
-        public LogLevel LogEnableDetail { get; set; }
+        public LogLevel LogLevel { get; set; }
 
         public void Awake()
         {
+            _loggingConfiguration = new LoggingConfiguration();
+            LogManager.Configuration = _loggingConfiguration;
             ConfigPath = Path.Combine(Application.persistentDataPath, "log");
-            LogEnableDetail = LogLevel.Dev;
-            RegisterLogger("All");
-#if UNITY_EDITOR
-            UnityLogConfig();
-#endif
+            LogLevel = LogLevel.Editor;
         }
 
-        public void Init(FileTarget fileTarget)
+        public void RegisterLogger(string name,FileTarget fileTarget = null)
         {
-            _defaultFileTarget = fileTarget;
-        }
-
-        public void RegisterLogger(string name)
-        {
-            var levelRule = _loggingConfiguration.FindRuleByName(name);
-            if (levelRule == null)
-            {
-                var levelTarget = GetLevelTarget(name, ConfigPath);
-                var allTarget = GetAllTarget(name, ConfigPath);
-                var allRule = new LoggingRule("*", NLog.LogLevel.Off, allTarget);
-                levelRule = new LoggingRule(name, NLog.LogLevel.Off, levelTarget);
-                SetLogLevel(LogEnableDetail, levelRule);
-                SetLogLevel(LogEnableDetail, allRule);
-                _loggingConfiguration.AddTarget(levelTarget);
-                _loggingConfiguration.AddTarget(allTarget);
-                _loggingConfiguration.AddRule(levelRule);
-                _loggingConfiguration.AddRule(allRule);
-                LogManager.Configuration = _loggingConfiguration;
-            }
-        }
-
-        public void AddUnityLog()
-        {
-            
-        }
-
-        public FileTarget GetDefaultTarget()
-        {
-            return new FileTarget()
-            {
-                Header = "-------",
-                Footer = "--------",
-                Encoding = Encoding.UTF8,
-                LineEnding = LineEndingMode.CRLF, //设置行结束符模式（CRLF
-                KeepFileOpen = false, //保持文件打开以提高性能
-                ConcurrentWrites = false, //禁用并发写入
-                OpenFileCacheTimeout = 30, //打开文件缓存超时时间（秒）
-                OpenFileCacheSize = 6, //打开文件缓存大小
-                OpenFileFlushTimeout = 10, //打开文件刷新超时时间（秒）
-                AutoFlush = true, //自动刷新缓冲区
-                CleanupFileName = true, //清理文件名
-                ArchiveAboveSize = 10240000, //当文件大小超过此值时进行归档（字节)
-                MaxArchiveFiles = 10, //最大归档文件数
-                MaxArchiveDays = 10, //最大归档天数
-                ArchiveFileName = "archive.${level:uppercase=true}.{#}.txt", //归档文件名模式
-                ArchiveNumbering = ArchiveNumberingMode.Date, // 归档编号模式（按日期）
-                ArchiveEvery = FileArchivePeriod.Month, //归档周期（每月
-                ArchiveOldFileOnStartup = false, //启动时归档旧文件
-                ArchiveOldFileOnStartupAboveSize = 1000000, //启动时归档超过指定大小的旧文件（字节)
-                ReplaceFileContentsOnEachWrite = false, //每次写入时替换文件内容
-                EnableFileDelete = true, //启用文件删除
-                ConcurrentWriteAttempts = 20000, //并发写入尝试次数
-            };
-        }
-
-        public FileTarget GetLevelTarget(string ruleName, string path)
-        {
-            var target = _loggingConfiguration.FindTargetByName<FileTarget>(ruleName);
+            var target = _loggingConfiguration.FindTargetByName<FileTarget>(name);
             if (target != null)
             {
-                return target;
+                return;
             }
 
-            target = _defaultFileTarget;
-            target.Name = ruleName;
-            target.FileName = Path.Combine(path, ruleName, "${level:uppercase=true}-${shortdate}.log");
-            target.Layout =
-                new SimpleLayout(
-                    "${longdate} [${callsite}(${callsite-filename:includeSourcePath=False}:${callsite-linenumber})] - ${message} ${exception:format=ToString}");
-            return target;
+            var fTarget = fileTarget ?? LogTargetHelper.GetDefaultTarget();
+            SetLevelTarget(name, fTarget);
+            var allTarget = SetAllTarget(name);
+
+            var rule = _loggingConfiguration.FindRuleByName(name);
+            if (rule == null)
+            {
+                rule = new LoggingRule(name,NLog.LogLevel.Off, fTarget)
+                {
+                    RuleName = name
+                };
+                rule.Targets.Add(allTarget);
+
+                var aTarget = _loggingConfiguration.FindTargetByName<FileTarget>("All");
+                var aaTarget = _loggingConfiguration.FindTargetByName<FileTarget>("All - All");
+                if (aTarget != null)
+                {
+                    rule.Targets.Add(aTarget);
+                }
+                if (aaTarget != null)
+                {
+                    rule.Targets.Add(aaTarget);
+                }
+                
+                SetLogLevel(LogLevel,rule);
+                _loggingConfiguration.AddRule(rule);
+            }
+            
+            LogManager.Configuration = _loggingConfiguration;
         }
 
-        public FileTarget GetAllTarget(string loggerName, string path)
+        public void AddUnityLog(UnityConsoleTarget unityConsoleTarget = null)
         {
-            var targetName = $"{loggerName} - all";
+            var target = unityConsoleTarget ?? LogTargetHelper.GetDefaultUnityConsoleTarget();
+            _loggingConfiguration.AddTarget(target);
+            _loggingConfiguration.AddRule(new LoggingRule("*",NLog.LogLevel.Trace,target));
+            LogManager.Configuration = _loggingConfiguration;
+        }
+
+        public void AddAllLog()
+        {
+            SetLevelTarget("All",LogTargetHelper.GetDefaultTarget());
+            SetAllTarget("All");
+        }
+        
+        public void Remove(string name)
+        {
+            _loggingConfiguration.RemoveRuleByName(name);
+            _loggingConfiguration.RemoveTarget(name);
+            _loggingConfiguration.RemoveTarget($"{name} - All");
+            LogManager.Configuration = _loggingConfiguration;
+        }
+
+        /// <summary>
+        /// 移除All目录Log,要移除所有Log请使用Clear()
+        /// </summary>
+        public void RemoveAllLog()
+        {
+            _loggingConfiguration.RemoveTarget("All");
+            _loggingConfiguration.RemoveTarget("All - All");
+            LogManager.Configuration = _loggingConfiguration;
+        }
+
+        public void Clear()
+        {
+            _loggingConfiguration = new LoggingConfiguration();
+            LogManager.Configuration = _loggingConfiguration;
+        }
+
+        public void Reset()
+        {
+            Awake();
+        }
+
+        public FileTarget GetLevelTarget(string ruleName)
+        {
+            return _loggingConfiguration.FindTargetByName<FileTarget>(ruleName);
+        }
+        
+        public FileTarget GetAllTarget(string loggerName)
+        {
+            return _loggingConfiguration.FindTargetByName<FileTarget>($"{loggerName} - All");
+        }
+
+        private void SetLevelTarget(string targetName,FileTarget fileTarget)
+        {
+            fileTarget.Name = targetName;
+            fileTarget.FileName = Path.Combine(ConfigPath, targetName, "${level:lowercase=true}-${shortdate}.log");
+            fileTarget.Layout =
+                new SimpleLayout(
+                    "${longdate} [${callsite}(${callsite-filename:includeSourcePath=False}:${callsite-linenumber})] - ${message} ${exception:format=ToString}");
+            _loggingConfiguration.AddTarget(fileTarget);
+        }
+
+        private FileTarget SetAllTarget(string loggerName)
+        {
+            var targetName = $"{loggerName} - All";
             var target = _loggingConfiguration.FindTargetByName<FileTarget>(targetName);
             if (target != null)
             {
                 return target;
             }
 
-            target = _defaultFileTarget;
+            target = LogTargetHelper.GetDefaultTarget();
             target.Name = targetName;
-            target.FileName = Path.Combine(path, loggerName, "all-${shortdate}.log");
+            target.FileName = Path.Combine(ConfigPath, loggerName, "All-${shortdate}.log");
             target.Layout =
                 new SimpleLayout(
-                    "${longdate} [${uppercase:${level}}] [${callsite}(${callsite-filename:includeSourcePath=False}:${callsite-linenumber})] - ${message} ${exception:format=ToString}");
+                    "${longdate} [${lowercase:${level}}] [${callsite}(${callsite-filename:includeSourcePath=False}:${callsite-linenumber})] - ${message} ${exception:format=ToString}");
+            _loggingConfiguration.AddTarget(target);
             return target;
         }
 
@@ -162,24 +186,6 @@ namespace KC
                 rule.EnableLoggingForLevel(NLog.LogLevel.Fatal);
             }
         }
-
-#if UNITY_EDITOR
-        public LogLevel UnityLogEnableDetail { get; set; } = LogLevel.Trace;
-
-        private void UnityLogConfig()
-        {
-            var target = new UnityConsoleTarget
-            {
-                Name = "UnityConsole",
-                Layout = "${longdate} ${level} ${message}"
-            };
-            _loggingConfiguration.AddTarget(target);
-            var rule = new LoggingRule("*", NLog.LogLevel.Off, target);
-            SetLogLevel(UnityLogEnableDetail, rule);
-            _loggingConfiguration.LoggingRules.Add(rule);
-            LogManager.Configuration = _loggingConfiguration;
-        }
-#endif
     }
 
     /// <summary>
