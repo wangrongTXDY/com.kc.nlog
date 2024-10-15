@@ -16,16 +16,16 @@ namespace KC
                     case 0:
                     case 1:
                     case 2:
-                        Debug.Log(logEvent.Message);
+                        Debug.Log(logEvent.FormattedMessage);
                         break;
                     case 3:
-                        Debug.LogWarning(logEvent.Message);
+                        Debug.LogWarning(logEvent.FormattedMessage);
                         break;
                     case 4:
-                        Debug.LogError(logEvent.Message);
+                        Debug.LogError(logEvent.FormattedMessage);
                         break;
                     case 5:
-                        Debug.LogException(new Exception(logEvent.Message));
+                        Debug.LogException(new Exception(logEvent.FormattedMessage));
                         break;
                 }
             }
