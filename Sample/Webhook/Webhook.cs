@@ -11,11 +11,13 @@ namespace KC
     {
 
         private List<string> _exceptionFunctions;
+        private uint _showLineCount;
        
         public void Awake()
         {
             Application.logMessageReceived += OnLog;
             _exceptionFunctions = new List<string>();
+            _showLineCount= 10;
         }
         
         private void OnLog(string logString,string stackTrace,LogType logType)
@@ -24,14 +26,13 @@ namespace KC
             {
                 
                 var mainInfo = GetExceptionMessageInfo(stackTrace);
-                var exceptionStr = $"{mainInfo.Item1}  {logString}\r\n{stackTrace}";
+                var exceptionStr = $"Function: {mainInfo.Item1}\r\n ErrorInfo: {logString}\r\n StackTrace: {stackTrace}";
                 if (_exceptionFunctions.Contains(mainInfo.Item2))
                 {
                     return;
                 }
                         
                 _exceptionFunctions.Add(mainInfo.Item2);
-                        
                 Debug.Log(exceptionStr);
             }
         }
@@ -83,7 +84,7 @@ namespace KC
 
                 if (infos.Length<2)
                 {
-                    while (count<10)
+                    while (count<_showLineCount)
                     {
                         count++;
                         infos = allLineStr[count].Split(".cs");
@@ -96,7 +97,7 @@ namespace KC
                 var type =infos[0];
                 var types = type.Split("/");
                 var function = $"{types[^2]} / {types[^1]}";
-                stringBuilder.Append("  function：").Append(function);
+                stringBuilder.Append(function);
 
                 var lineStr = infos[^1];
                 var line = lineStr.Split(":");
