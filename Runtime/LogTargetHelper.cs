@@ -10,10 +10,10 @@ namespace KC
             return new FileTarget()
             {
                 Header = "-------",
-                Footer = "--------",
+                Footer = "-------",
                 Encoding = Encoding.UTF8,
                 LineEnding = LineEndingMode.CRLF, //设置行结束符模式（CRLF
-                KeepFileOpen = false, //保持文件打开以提高性能
+                KeepFileOpen = true, //保持文件打开以提高性能
                 ConcurrentWrites = false, //禁用并发写入
                 OpenFileCacheTimeout = 30, //打开文件缓存超时时间（秒）
                 OpenFileCacheSize = 6, //打开文件缓存大小
