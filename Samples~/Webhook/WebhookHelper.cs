@@ -18,5 +18,29 @@ namespace KC
             });
             //return $@"{{""msg_type"": ""text"", ""content"": {{ ""text"": ""{message}"" }}}}";
         }
+        
+        public static string GetDingDingContent(string message)
+        {
+            return JsonUtility.ToJson(new DingDing()
+            {
+                msgtype = "text",
+                text = new DingDingContent()
+                {
+                    content = message
+                }
+            });
+        }
+        
+        public static string GetWeChatContent(string message)
+        {
+            return JsonUtility.ToJson(new WeChat()
+            {
+                msgtype = "text",
+                text = new WeChatContent()
+                {
+                    content = message
+                }
+            });
+        }
     }
 }
