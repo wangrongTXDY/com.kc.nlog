@@ -7,13 +7,13 @@ using UnityEngine;
 
 namespace KC
 {
-    public class Webhook : Singleton<Webhook>, ISingletonAwake
+    public class Webhook : Singleton<Webhook>, ISingletonAwake<uint>
     {
 
         private List<string> _exceptionFunctions;
         private uint _showLineCount;
        
-        public void Awake()
+        public void Awake(uint aa)
         {
             Application.logMessageReceived += OnLog;
             _exceptionFunctions = new List<string>();
