@@ -1,7 +1,10 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using NLog;
 using NLog.Config;
+using NLog.Filters;
 using NLog.Layouts;
 using NLog.Targets;
 using UnityEngine;
@@ -16,6 +19,7 @@ namespace KC
         private LogType _logType;
         private LoggingConfiguration _loggingConfiguration;
 
+        
         public string ConfigPath { get; set; }
 
         public LogLevel LogLevel { get; set; }
@@ -26,8 +30,11 @@ namespace KC
             LogManager.Configuration = _loggingConfiguration;
             ConfigPath = Path.Combine(Application.persistentDataPath, "log");
             LogLevel = LogLevel.Editor;
+            Application.logMessageReceived += ApplicationOnLogMessageReceived;
+            
+            RegisterLogger("UnityApplication");
         }
-
+        
         public void RegisterLogger(string name,FileTarget fileTarget = null)
         {
             var target = _loggingConfiguration.FindTargetByName<FileTarget>(name);
@@ -48,18 +55,6 @@ namespace KC
                     RuleName = name
                 };
                 rule.Targets.Add(allTarget);
-
-                var aTarget = _loggingConfiguration.FindTargetByName<FileTarget>("All");
-                var aaTarget = _loggingConfiguration.FindTargetByName<FileTarget>("All - All");
-                if (aTarget != null)
-                {
-                    rule.Targets.Add(aTarget);
-                }
-                if (aaTarget != null)
-                {
-                    rule.Targets.Add(aaTarget);
-                }
-                
                 SetLogLevel(LogLevel,rule);
                 _loggingConfiguration.AddRule(rule);
             }
@@ -71,14 +66,47 @@ namespace KC
         {
             var target = unityConsoleTarget ?? LogTargetHelper.GetDefaultUnityConsoleTarget();
             _loggingConfiguration.AddTarget(target);
-            _loggingConfiguration.AddRule(new LoggingRule("*",NLog.LogLevel.Trace,target));
+            NLog.LogManager.Setup().LoadConfiguration(builder => {
+                builder.ForLogger().FilterDynamicIgnore(evt => evt.FormattedMessage?.Length > 100).WriteToFile("log.txt");
+            });
+            var rule = new LoggingRule("*", NLog.LogLevel.Trace, target)
+            {
+                RuleName = "UnityConsole",
+                Filters =
+                {
+                    new ConditionBasedFilter()
+                    {
+                        Condition ="'${logger}'!='UnityApplication'",
+                        Action = FilterResult.Log
+                    }
+                }
+            };
+            _loggingConfiguration.AddRule(rule);
             LogManager.Configuration = _loggingConfiguration;
         }
 
         public void AddAllLog()
         {
-            SetLevelTarget("All",LogTargetHelper.GetDefaultTarget());
-            SetAllTarget("All");
+            if (_loggingConfiguration.FindRuleByName("All") != null)
+            {
+                return;
+            }
+            var fTarget = LogTargetHelper.GetDefaultTarget();
+            SetLevelTarget("All",fTarget);
+            fTarget.Layout =
+                new SimpleLayout(
+                    "${longdate} [${logger}] [${callsite}(${callsite-filename:includeSourcePath=False}:${callsite-linenumber})] - ${message} ${exception:format=ToString}");
+            var allTarget = SetAllTarget("All");
+            allTarget.Layout =
+                new SimpleLayout(
+                    "${longdate} [${logger}] [${lowercase:${level}}] [${callsite}(${callsite-filename:includeSourcePath=False}:${callsite-linenumber})] - ${message} ${exception:format=ToString}");
+            var rule = new LoggingRule("*", NLog.LogLevel.Trace, fTarget)
+            {
+                RuleName = "All"
+            };
+            rule.Targets.Add(allTarget);
+            _loggingConfiguration.AddRule(rule);
+            LogManager.Configuration = _loggingConfiguration;
         }
         
         public void Remove(string name)
@@ -94,6 +122,11 @@ namespace KC
         /// </summary>
         public void RemoveAllLog()
         {
+            if (_loggingConfiguration.FindRuleByName("All") == null)
+            {
+                return;
+            }
+            _loggingConfiguration.RemoveRuleByName("All");
             _loggingConfiguration.RemoveTarget("All");
             _loggingConfiguration.RemoveTarget("All - All");
             LogManager.Configuration = _loggingConfiguration;
@@ -185,6 +218,45 @@ namespace KC
             {
                 rule.EnableLoggingForLevel(NLog.LogLevel.Fatal);
             }
+        }
+        
+        private void ApplicationOnLogMessageReceived(string condition, string stacktrace, LogType type)
+        {
+            if (type is not (LogType.Error or LogType.Exception or LogType.Warning))
+            {
+                return;
+            }
+            
+            if (condition.StartsWith("Exception: "))
+            {
+                //这里只会处理被动异常,所以主动消息不处理
+                return;
+            }
+            
+            var stringBuilder = new StringBuilder();
+            stringBuilder.AppendLine(condition);
+            stringBuilder.AppendLine(stacktrace);
+            var message = stringBuilder.ToString();
+            
+            switch (type)
+            {
+                case LogType.Error:
+                    LogManager.GetLogger("UnityApplication").Error(message);
+                    break;
+                case LogType.Warning:
+                    LogManager.GetLogger("UnityApplication").Warn(message);
+                    break;
+                case LogType.Exception:
+                    LogManager.GetLogger("UnityApplication").Fatal(message);
+                    break;
+            }
+        }
+
+        public override void Destroy()
+        {
+            base.Destroy();
+            Application.logMessageReceived -= ApplicationOnLogMessageReceived;
+            Clear();
         }
     }
 
